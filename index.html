@@ -439,6 +439,7 @@
   }
   /* The wordmark is set in Rokkitt, a slab serif, to match the paper-and-ink idea. */
   .wordmark { font-family: Rokkitt, Rockwell, 'Roboto Slab', Georgia, serif; font-weight: 600; letter-spacing: 0; font-size: clamp(44px, 9vw, 58px); line-height: 1; background: none; }
+  .wordmark .beta { font: 600 0.22em/1 var(--ui); letter-spacing: .08em; color: var(--muted); vertical-align: super; margin-left: .3em; }
   .sub { font-size: clamp(15px, 2vw, 16px); }
   .fine { font-size: 14px; }
   [class*="pill"], .btn, .chip, .tag, .segctl button, h3, .phraselbl, .joinlbl, .lbl, .k { font-family: var(--ui); }
@@ -735,7 +736,7 @@
 <!-- Signing in -->
 <section class="screen" id="signInScreen" hidden>
   <div class="card">
-    <h1 class="wordmark">Luddite HM</h1>
+    <h1 class="wordmark">Luddite HM<span class="beta">BETA</span></h1>
     <p class="sub">As close to paper as possible.</p>
     <div id="gsiBtn"></div>
     <p class="fine" id="signInNote"></p>
@@ -746,7 +747,7 @@
 <!-- Student: your writing sessions, or type an Entry Phrase -->
 <section class="screen" id="joinScreen" hidden>
   <div class="card">
-    <h1 class="wordmark">Luddite HM</h1>
+    <h1 class="wordmark">Luddite HM<span class="beta">BETA</span></h1>
     <div id="mineBox" hidden style="margin-bottom:26px">
       <label class="joinlbl">Your writing sessions</label>
       <div id="mineList"></div>
@@ -769,7 +770,7 @@
 <!-- Student: waiting room (also writing session ended / removed) -->
 <section class="screen" id="waitScreen" hidden>
   <div class="card">
-    <h1 class="wordmark">Luddite HM</h1>
+    <h1 class="wordmark">Luddite HM<span class="beta">BETA</span></h1>
     <p class="sub" id="waitRoom"></p>
     <p id="waitMsg"><span class="pulse"></span>Waiting for your teacher to let you in&hellip;</p>
     <p class="fine">This page opens by itself once you&rsquo;re in.</p>
@@ -780,7 +781,7 @@
 <!-- Ready to write -->
 <section class="screen" id="readyScreen" hidden>
   <div class="card">
-    <h1 class="wordmark">Luddite HM</h1>
+    <h1 class="wordmark">Luddite HM<span class="beta">BETA</span></h1>
     <p class="sub" id="readyRoom"></p>
     <p class="sub" id="readyWindow" hidden></p>
     <div class="readyprompt" id="readyPrompt" hidden><b>Prompt</b><span id="readyPromptText"></span></div>
@@ -850,7 +851,7 @@
 <section class="screen page" id="dashScreen" hidden>
   <div class="card dash">
     <div class="dashtop">
-      <h2 class="wordmark">Luddite HM</h2>
+      <h2 class="wordmark">Luddite HM<span class="beta">BETA</span></h2>
     </div>
 
     <!-- Writing sessions this teacher is in as a writer (a class they are on, e.g. a class of teachers) -->
