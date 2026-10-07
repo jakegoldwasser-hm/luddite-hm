@@ -740,7 +740,7 @@
     <p class="sub">As close to paper as possible.</p>
     <div id="gsiBtn"></div>
     <p class="fine" id="signInNote"></p>
-    <p class="fine" style="margin-top:28px"><a href="privacy.html" style="color:inherit">Privacy</a> &middot; <a href="https://jake-goldwasser.com/terms.html" style="color:inherit">Terms</a></p>
+    <p class="fine" style="margin-top:28px"><a href="privacy.html" style="color:inherit">Privacy</a> &middot; <a href="terms.html" style="color:inherit">Terms</a></p>
   </div>
 </section>
 
@@ -1542,6 +1542,7 @@
     if (data.session) authToken = data.session;
     store(AUTH_KEY, authToken);
     me = data.luddite;
+    if (!/@horacemann\.org$/i.test(me.email || '')) { signOut(); $('signInNote').textContent = 'Luddite HM is only for Horace Mann accounts. Sign in with your @horacemann.org address.'; return; }
     isTeacher = me.role === 'owner' || me.role === 'teacher';
     if (isTester(me.email)) { var tt = testTokens(); tt[me.email.toLowerCase()] = authToken; store(TEST_KEY, JSON.stringify(tt)); }
     each('.who-email', function (n) { n.textContent = me.email; });
@@ -1589,7 +1590,7 @@
     $('signInNote').textContent = '';
     (function wait(n) {
       if (window.google && google.accounts && google.accounts.id) {
-        var opts = { client_id: GOOGLE_CLIENT_ID, callback: handleCredential, use_fedcm_for_prompt: true, itp_support: true };
+        var opts = { client_id: GOOGLE_CLIENT_ID, callback: handleCredential, use_fedcm_for_prompt: true, itp_support: true, hd: 'horacemann.org' };
         if (typeof hint === 'string') opts.login_hint = hint;
         google.accounts.id.initialize(opts);
         google.accounts.id.renderButton($('gsiBtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with' });
