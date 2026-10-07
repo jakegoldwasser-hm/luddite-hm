@@ -1,0 +1,62 @@
+# Every morning, brings in Luddite's newest page from jake-goldwasser-2026, turns it
+# into Luddite HM's with hm.sh, commits it if anything changed, and publishes the
+# site. Also runs on every push here, and by hand from the Actions tab
+# ("Sync from Luddite" -> Run workflow). If hm.sh stops fitting Luddite's page,
+# the run fails and the live site stays as it was.
+name: Sync from Luddite
+
+on:
+  schedule:
+    - cron: '0 10 * * *'   # 6 a.m. New York (EDT), 5 a.m. in winter
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring in Luddite's page and make it Luddite HM's
+        run: |
+          base=https://raw.githubusercontent.com/jakegoldwasser/jake-goldwasser-2026/main
+          curl -fsSL "$base/luddite/index.html" -o /tmp/luddite.html
+          bash hm.sh /tmp/luddite.html > index.html
+          for f in README.md index.mjs migrate.mjs restore-teachers.mjs; do
+            curl -fsSL "$base/luddite-backend/$f" -o "luddite-backend/$f"
+          done
+
+      - name: Commit if Luddite changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Sync from Luddite"
+            git push
+          fi
+
+      - name: Gather the site
+        run: |
+          mkdir _site
+          cp index.html privacy.html terms.html favicon.svg _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
