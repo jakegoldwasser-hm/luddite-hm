@@ -20,6 +20,7 @@ step title       's#<title>Luddite</title>#<title>Luddite HM</title>#'
 step wordmark    's#class="wordmark">Luddite</h#class="wordmark">Luddite HM<span class="beta">BETA</span></h#g'
 step beta-style  's#(\n  \.wordmark \{ font-family: Rokkitt[^\n]*)#$1\n  .wordmark .beta { font: 600 0.22em/1 var(--ui); letter-spacing: .08em; color: var(--muted); vertical-align: super; margin-left: .3em; }#'
 step favicon     's#href="\.\./favicon\.svg#href="favicon.svg#g'
+step highlight  's#src="/selection-highlight\.js#src="selection-highlight.js#'
 step terms       's#href="\.\./terms\.html"#href="terms.html"#g'
 # Google's account chooser offers Horace Mann accounts first...
 step hd-hint     's#(use_fedcm_for_prompt: true, itp_support: true)#$1, hd: '\''horacemann.org'\''#'
