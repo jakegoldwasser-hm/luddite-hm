@@ -35,6 +35,7 @@ jobs:
           base=https://raw.githubusercontent.com/jakegoldwasser/jake-goldwasser-2026/main
           curl -fsSL "$base/luddite/index.html" -o /tmp/luddite.html
           bash hm.sh /tmp/luddite.html > index.html
+          curl -fsSL "$base/selection-highlight.js" -o selection-highlight.js
           for f in README.md index.mjs migrate.mjs restore-teachers.mjs; do
             curl -fsSL "$base/luddite-backend/$f" -o "luddite-backend/$f"
           done
@@ -52,7 +53,7 @@ jobs:
       - name: Gather the site
         run: |
           mkdir _site
-          cp index.html privacy.html terms.html favicon.svg _site/
+          cp index.html privacy.html terms.html favicon.svg selection-highlight.js _site/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
