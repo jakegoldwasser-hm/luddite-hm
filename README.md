@@ -14,7 +14,9 @@ Luddite in the main repository, or change `hm.sh` here. If a Luddite change stop
 `hm.sh` from fitting, the action fails and the live site stays as it was. To sync at
 once: Actions -> Sync from Luddite -> Run workflow.
 
-`privacy.html` and `terms.html` are Luddite HM's own and are not synced.
+`privacy.html`, `terms.html`, `admin.html` (the administrator view) and `hm-admin.js` (the
+"Administrator" link at the top of the page for administrators) are Luddite HM's own and are not synced.
+See `CLAUDE.md` for what Luddite HM's administrators can see.
 
 The page is `index.html`, one file. It talks
 to the same server as Luddite (the `luddite-api` Lambda and the `LudditeData` table

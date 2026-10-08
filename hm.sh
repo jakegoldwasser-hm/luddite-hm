@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Turns Luddite's page (luddite/index.html in jakegoldwasser/jake-goldwasser-2026)
 # into Luddite HM's: the name with BETA, its own icon, Terms and Privacy pages,
-# and sign-in only for @horacemann.org accounts.
+# sign-in only for @horacemann.org accounts, and the administrators' link
+# (hm-admin.js).
 # Usage: ./hm.sh luddite.html > index.html
 # Stops with an error if Luddite has changed so that a step no longer fits,
 # so the sync never publishes a page that isn't Luddite HM's.
@@ -26,6 +27,9 @@ step terms       's#href="\.\./terms\.html"#href="terms.html"#g'
 step hd-hint     's#(use_fedcm_for_prompt: true, itp_support: true)#$1, hd: '\''horacemann.org'\''#'
 # ...and anyone else is signed straight back out.
 step hm-only     's#(\n(\s*)me = data\.luddite;\n)#$1$2if (!/\@horacemann\\.org\$/i.test(me.email || '\'''\'')) { signOut(); \$('\''signInNote'\'').textContent = '\''Luddite HM is only for Horace Mann accounts. Sign in with your \@horacemann.org address.'\''; return; }\n#'
+
+# Horace Mann administrators get "Administrator" at the top, linking to admin.html.
+step hm-admin   's#</body>#<script src="hm-admin.js" defer></script>\n</body>#'
 
 cat "$tmp"
 rm -f "$tmp"

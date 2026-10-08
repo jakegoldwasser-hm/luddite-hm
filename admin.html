@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Luddite HM Administrator</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Rokkitt:wght@600&display=swap" rel="stylesheet">
+<!--
+  Luddite HM only (not part of Luddite, and not rebuilt by the daily sync).
+  The administrator view: Horace Mann's administration reads every Horace Mann
+  writing session, class, rubric, draft, paper and mark-up. Read-only. It
+  uses the sign-in saved by the Luddite HM page and the server's
+  /luddite/admin/* routes (routeHmAdmin in luddite-backend/index.mjs), which
+  record every look in the access log.
+-->
+<style>
+  :root {
+    --paper: #FAF6EC; --card: #FFFFFF; --ink: #2B2118; --muted: #6B6254; --rule: #E6DECB;
+    --edge: #B9AE97; --hover: #F1EBDB; --accent: #55612D; --warn: #8B3A2B; --pen-wash: #DDEBD8;
+    --ui: 'Bricolage Grotesque', system-ui, sans-serif; --display: Literata, Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.5 var(--ui); padding: 0 16px 80px; }
+  main { max-width: 900px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 28px 0 18px; border-bottom: 1px solid var(--rule); }
+  .wordmark { font: 600 28px/1 Rokkitt, Georgia, serif; margin: 0; }
+  .wordmark a { color: inherit; text-decoration: none; }
+  .badge { font: 600 12px/1 var(--ui); letter-spacing: .08em; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 5px 9px; border-radius: 6px; }
+  .who { margin-left: auto; color: var(--muted); font-size: 14px; }
+  nav { display: flex; gap: 6px; margin: 18px 0 6px; flex-wrap: wrap; }
+  nav a { color: var(--ink); text-decoration: none; padding: 6px 12px; border: 1px solid var(--edge); border-radius: 999px; font-size: 14px; }
+  nav a.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .note { color: var(--muted); font-size: 14px; margin: 6px 0 22px; }
+  h1 { font: 400 30px/1.2 var(--display); margin: 8px 0 4px; }
+  h2 { font: 400 21px/1.3 var(--display); margin: 30px 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 15px; }
+  a { color: var(--ink); }
+  .crumbs { font-size: 14px; margin: 14px 0 0; }
+  .crumbs a { color: var(--muted); }
+  .list { display: grid; gap: 8px; }
+  .row { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; color: inherit; text-decoration: none; }
+  a.row:hover { background: var(--hover); border-color: var(--edge); }
+  .row .main { font-weight: 600; overflow-wrap: anywhere; }
+  .row .meta { color: var(--muted); font-size: 14px; }
+  .row .right { margin-left: auto; color: var(--muted); font-size: 14px; }
+  .tag { font-size: 12px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--edge); color: var(--muted); }
+  .tag.gone { border-color: var(--warn); color: var(--warn); }
+  input[type=search], input[type=email] { font: inherit; padding: 8px 12px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card); width: 100%; max-width: 380px; }
+  button { font: 600 14px/1 var(--ui); padding: 9px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.quiet { background: transparent; color: var(--ink); border-color: var(--edge); font-weight: 400; }
+  .prompt, .writing { font: 17px/1.65 var(--display); white-space: pre-wrap; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; overflow-wrap: anywhere; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--card); }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); }
+  td.picked { background: var(--pen-wash); font-weight: 600; }
+  .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; margin-bottom: 14px; }
+  iframe.paper { width: 100%; min-height: 70vh; border: 1px solid var(--rule); border-radius: 10px; background: #fff; }
+  .msg { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; margin-top: 22px; }
+  .err { color: var(--warn); }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 15px; margin: 8px 0; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  @media print { nav, .note, .crumbs { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="wordmark"><a href="./">Luddite HM</a></p>
+    <span class="badge">Administrator</span>
+    <span class="who" id="who"></span>
+  </header>
+  <nav id="nav" hidden>
+    <a href="#teachers" data-tab="teachers">Teachers</a>
+    <a href="#admins" data-tab="admins">Administrators</a>
+    <a href="#log" data-tab="log">Access log</a>
+  </nav>
+  <p class="note" id="note" hidden>Read-only: nothing here can be changed, marked up or handed back. Every page you open is recorded in the access log, which all administrators can see.</p>
+  <div id="view"><p class="sub">Loading…</p></div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://2zzmrvoptttg6stc5cfjdsz3za0cryjt.lambda-url.us-east-1.on.aws';
+  var AUTH_KEY = 'luddite.auth.v1'; // the sign-in saved by the Luddite HM page
+  var token = null, me = null, overview = null;
+  var view = document.getElementById('view');
+
+  function h(tag, attrs, kids) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === 'text') el.textContent = attrs[k];
+      else if (k === 'class') el.className = attrs[k];
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), attrs[k]);
+      else el.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c != null) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return el;
+  }
+  function show() { view.textContent = ''; Array.prototype.forEach.call(arguments, function (n) { if (n) view.appendChild(n); }); }
+  function when(ms) { return ms ? new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—'; }
+  function enc(s) { return encodeURIComponent(s); }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+  function message(text, cls) { show(h('div', { class: 'msg' }, [h('p', { class: cls || '', text: text })])); }
+
+  async function api(path, body) {
+    var headers = { Authorization: 'Bearer ' + token };
+    if (body) headers['Content-Type'] = 'application/json';
+    var res = await fetch(API + path, { method: body ? 'PUT' : 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) { var e = new Error(data.error || 'failed'); e.status = res.status; throw e; }
+    return data;
+  }
+  function failed(e) {
+    var why = {
+      not_admin: 'This account isn’t a Luddite HM administrator.',
+      needs_scan_permission: 'The server needs one more permission before it can list everything (dynamodb:Scan on the LudditeData table). Ask Jake Goldwasser.',
+      not_found: 'That isn’t there, or it isn’t Horace Mann work.',
+      primary_only: 'Only the primary administrator can add or remove administrators.',
+      manager_only_admins: 'Your account can add and remove administrators, but can’t see any work.',
+      horacemann_only: 'Administrators must have an @horacemann.org address.',
+      cannot_remove_primary: 'That account can’t be removed here.'
+    }[e.message];
+    if (!why && e.status === 401) why = 'Your sign-in has run out. Open Luddite HM, sign in again, then come back.';
+    if (!why && e.status === 404) why = 'The server hasn’t been updated for administrators yet.';
+    message(why || 'Something went wrong (' + e.message + '). Try reloading.', 'err');
+  }
+
+  function crumbs(list) {
+    var p = h('p', { class: 'crumbs' });
+    list.forEach(function (c, i) { if (i) p.appendChild(document.createTextNode(' / ')); p.appendChild(h('a', { href: c[0], text: c[1] })); });
+    return p;
+  }
+  function nameOf(t) { return t.displayName || t.name || t.email; }
+  function teacherCrumb(sub, fallback) {
+    var t = overview && overview.find(function (x) { return x.sub === sub; });
+    return ['#t/' + enc(sub), t ? nameOf(t) : fallback];
+  }
+  async function loadOverview() {
+    if (!overview) overview = (await api('/luddite/admin/overview')).teachers;
+    return overview;
+  }
+
+  // ---- Teachers ----
+  async function teachers() {
+    if (!overview) show(h('p', { class: 'sub', text: 'Loading every Horace Mann teacher…' }));
+    await loadOverview();
+    var list = h('div', { class: 'list' });
+    function draw(q) {
+      list.textContent = '';
+      var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      overview.filter(function (t) {
+        var hay = [t.displayName, t.name, t.email].join(' ').toLowerCase();
+        return words.every(function (w) { return hay.indexOf(w) >= 0; });
+      }).forEach(function (t) {
+        list.appendChild(h('a', { class: 'row', href: '#t/' + enc(t.sub) }, [
+          h('span', { class: 'main', text: nameOf(t) }),
+          h('span', { class: 'meta', text: t.email }),
+          h('span', { class: 'right', text: plural(t.sessions.length, 'writing session', 'writing sessions') + ' · ' + plural(t.classes.length, 'class', 'classes') })
+        ]));
+      });
+      if (!list.children.length) list.appendChild(h('p', { class: 'sub', text: overview.length ? 'No teacher matches.' : 'No Horace Mann teacher has made anything yet.' }));
+    }
+    var search = h('input', { type: 'search', placeholder: 'Find a teacher', 'aria-label': 'Find a teacher', oninput: function () { draw(search.value); } });
+    draw('');
+    show(h('h1', { text: 'Teachers' }), h('p', { class: 'sub', text: plural(overview.length, 'Horace Mann teacher', 'Horace Mann teachers') + ' in Luddite HM.' }), h('p', {}, [search]), list);
+  }
+
+  function stateTag(s) {
+    if (s.deleted) return h('span', { class: 'tag gone', text: 'Deleted by teacher' });
+    return h('span', { class: 'tag', text: s.state === 'running' ? 'Happening now' : s.state === 'upcoming' ? 'Coming up' : 'Past' });
+  }
+
+  function rubricTable(r, scores) {
+    var head = h('tr', {}, [h('th', { text: r.name || 'Rubric' })].concat(r.levels.map(function (l) { return h('th', { text: l }); })));
+    var rows = r.rows.map(function (row, i) {
+      return h('tr', {}, [h('td', { text: row.skill + (r.weighted ? ' (' + (row.weight || 0) + '%)' : '') })].concat(row.cells.map(function (c, j) {
+        return h('td', { text: c, class: scores && scores[i] === j ? 'picked' : '' });
+      })));
+    });
+    return h('div', { class: 'scroll' }, [h('table', {}, [head].concat(rows))]);
+  }
+
+  async function teacher(sub) {
+    await loadOverview();
+    var t = overview.find(function (x) { return x.sub === sub; });
+    if (!t) return message('That teacher isn’t in Luddite HM.', 'err');
+    var sessions = h('div', { class: 'list' }, t.sessions.map(function (s) {
+      return h('a', { class: 'row', href: '#s/' + enc(s.code) }, [
+        h('span', { class: 'main', text: s.title || s.codeLabel }), stateTag(s),
+        h('span', { class: 'meta', text: when(s.startAt || s.createdAt) }),
+        h('span', { class: 'right', text: plural(s.students, 'student', 'students') + ' · ' + plural(s.submissions, 'paper', 'papers') })
+      ]);
+    }));
+    var classes = h('div', { class: 'list' }, t.classes.map(function (c) {
+      return h('a', { class: 'row', href: '#c/' + enc(c.id) }, [
+        h('span', { class: 'main', text: c.name }), c.deleted ? h('span', { class: 'tag gone', text: 'Deleted by teacher' }) : null,
+        h('span', { class: 'right', text: plural(c.count, 'address', 'addresses') })
+      ]);
+    }));
+    show(crumbs([['#teachers', 'Teachers']]), h('h1', { text: nameOf(t) }), h('p', { class: 'sub', text: t.email }),
+      h('h2', { text: 'Writing sessions' }), t.sessions.length ? sessions : h('p', { class: 'sub', text: 'None.' }),
+      h('h2', { text: 'Classes' }), t.classes.length ? classes : h('p', { class: 'sub', text: 'None.' }),
+      (t.rubrics || []).length ? h('h2', { text: 'Rubrics' }) : null, h('div', {}, (t.rubrics || []).map(function (r) { return rubricTable(r); })));
+  }
+
+  // ---- One writing session ----
+  function statusOf(s) {
+    if (s.status === 'admitted') return s.handedIn ? 'Handed in' : s.lockedOut ? 'Locked' : 'Let in';
+    return { waiting: 'Waiting', removed: 'Removed' }[s.status] || s.status || '—';
+  }
+  async function session(code) {
+    var d = await api('/luddite/admin/session?code=' + enc(code));
+    try { await loadOverview(); } catch (e) { /* the crumbs fall back to the email */ }
+    var r = d.room, students = r.students || {}, subs = r.submissions || [];
+    var paperOf = {};
+    subs.forEach(function (x) { paperOf[x.sub] = x; });
+    var rows = Object.keys(students).map(function (sub) {
+      var s = students[sub], p = paperOf[sub], hasPaper = p && p.stored !== false;
+      return h('tr', {}, [
+        h('td', { text: s.name || '—' }), h('td', { text: s.email }), h('td', { text: statusOf(s) }),
+        h('td', { text: String(s.words || 0) }), h('td', { text: String(s.leaves || 0) }),
+        h('td', {}, [hasPaper ? h('a', { href: '#p/' + enc(p.id), text: 'Paper' }) : null, hasPaper ? ' · ' : null, h('a', { href: '#d/' + enc(r.code) + '/' + enc(sub), text: 'Draft' })])
+      ]);
+    });
+    var table = h('div', { class: 'scroll' }, [h('table', {}, [h('tr', {}, ['Student', 'Email', 'Status', 'Words', 'Left the page', ''].map(function (x) { return h('th', { text: x }); }))].concat(rows))]);
+    var facts = h('dl', { class: 'facts' }, [
+      h('dt', { text: 'Teacher' }), h('dd', { text: (r.teacher.name ? r.teacher.name + ' ' : '') + '(' + r.teacher.email + ')' }),
+      h('dt', { text: 'Entry Phrase' }), h('dd', { text: r.codeLabel || r.code }),
+      h('dt', { text: 'Starts' }), h('dd', { text: when(r.startAt || r.createdAt) }),
+      h('dt', { text: 'Ended' }), h('dd', { text: r.endedAt ? when(r.endedAt) : '—' }),
+      h('dt', { text: 'Class' }), h('dd', { text: d.roster ? (d.roster.name || 'Its own list') + ' (' + d.roster.emails.length + ')' : 'None' })
+    ].concat(r.deletedAt ? [h('dt', { text: 'Deleted' }), h('dd', { class: 'err', text: when(r.deletedAt) })] : []));
+    show(crumbs([['#teachers', 'Teachers'], teacherCrumb(r.teacher.sub, r.teacher.email)]), h('h1', { text: r.title || r.codeLabel }), facts,
+      h('h2', { text: 'Prompt' }), h('div', { class: 'prompt', text: r.prompt || '(No prompt)' }),
+      r.rubric ? h('h2', { text: 'Rubric' }) : null, r.rubric ? rubricTable(r.rubric) : null,
+      h('h2', { text: 'Students' }), rows.length ? table : h('p', { class: 'sub', text: 'Nobody joined.' }));
+  }
+
+  // ---- One paper, marked up ----
+  async function paper(id) {
+    var d = await api('/luddite/admin/paper?id=' + enc(id)), p = d.paper;
+    try { await loadOverview(); } catch (e) { /* the crumbs fall back to the email */ }
+    // The server builds this from escaped text; the frame runs no scripts either way.
+    var frame = h('iframe', { class: 'paper', sandbox: '', title: 'The paper with its mark-up' });
+    frame.srcdoc = d.markedHtml.replace('<body>', '<body style="font:16px/1.65 Georgia,serif;color:#2B2118;padding:8px 18px">');
+    var facts = h('dl', { class: 'facts' }, [
+      h('dt', { text: 'Student' }), h('dd', { text: (p.name ? p.name + ' ' : '') + '(' + p.email + ')' }),
+      h('dt', { text: 'Writing session' }), h('dd', {}, [h('a', { href: '#s/' + enc(p.code), text: p.roomTitle || p.code })]),
+      h('dt', { text: 'Teacher' }), h('dd', { text: (d.teacher.name ? d.teacher.name + ' ' : '') + '(' + d.teacher.email + ')' }),
+      h('dt', { text: 'Handed in' }), h('dd', { text: when(p.at) }),
+      h('dt', { text: 'Words' }), h('dd', { text: String(p.words || 0) }),
+      h('dt', { text: 'Left the page' }), h('dd', { text: String(p.leaves || 0) }),
+      h('dt', { text: 'Grade' }), h('dd', { text: p.grade || '—' }),
+      h('dt', { text: 'Handed back' }), h('dd', { text: p.returnedAt ? when(p.returnedAt) : 'Not yet' })
+    ]);
+    var rubric = p.rubric || d.roomRubric;
+    show(crumbs([['#teachers', 'Teachers'], teacherCrumb(d.teacher.sub, d.teacher.email), ['#s/' + enc(p.code), p.roomTitle || p.code]]),
+      h('h1', { text: p.name || p.email }), facts,
+      rubric ? h('h2', { text: 'Rubric' }) : null, rubric ? rubricTable(rubric, p.rubricScores) : null,
+      h('h2', { text: 'Paper and mark-up' }), frame);
+  }
+
+  async function draft(code, sub) {
+    var d = await api('/luddite/admin/draft?code=' + enc(code) + '&sub=' + enc(sub)), t = d.draft;
+    show(crumbs([['#teachers', 'Teachers'], ['#s/' + enc(code), 'Writing session']]),
+      h('h1', { text: 'Draft: ' + (d.student.name || d.student.email) }),
+      h('p', { class: 'sub', text: t ? 'Last backed up ' + when(t.at) + '.' : 'No draft was backed up.' }),
+      t ? h('div', { class: 'writing', text: t.text || '' }) : null,
+      t && t.prev ? h('h2', { text: 'Earlier copy (' + when(t.prev.at) + ')' }) : null,
+      t && t.prev ? h('p', { class: 'sub', text: 'Kept because the writing suddenly got much shorter.' }) : null,
+      t && t.prev ? h('div', { class: 'writing', text: t.prev.text }) : null);
+  }
+
+  async function klass(id) {
+    var c = (await api('/luddite/admin/class?id=' + enc(id)))['class'];
+    try { await loadOverview(); } catch (e) { /* the crumbs fall back to the email */ }
+    show(crumbs([['#teachers', 'Teachers'], teacherCrumb(c.teacher.sub, c.teacher.email)]), h('h1', { text: c.name }),
+      h('p', { class: 'sub', text: plural((c.emails || []).length, 'address', 'addresses') + ' · made ' + when(c.createdAt) }),
+      h('div', { class: 'writing', text: (c.emails || []).join('\n') }));
+  }
+
+  // ---- Administrators ----
+  async function admins(data) {
+    data = data || await api('/luddite/admin/admins');
+    var list = h('div', { class: 'list' });
+    data.primary.forEach(function (e) { list.appendChild(h('div', { class: 'row' }, [h('span', { class: 'main', text: e }), h('span', { class: 'tag', text: 'Primary' })])); });
+    (data.managers || []).forEach(function (e) { list.appendChild(h('div', { class: 'row' }, [h('span', { class: 'main', text: e }), h('span', { class: 'tag', text: 'Adds and removes administrators; can’t see any work' })])); });
+    data.admins.forEach(function (a) {
+      list.appendChild(h('div', { class: 'row' }, [
+        h('span', { class: 'main', text: a.email }),
+        h('span', { class: 'meta', text: 'added ' + when(a.addedAt) + (a.addedBy ? ' by ' + a.addedBy : '') }),
+        me.canGrant ? h('span', { class: 'right' }, [h('button', { class: 'quiet', type: 'button', text: 'Remove', onclick: async function () {
+          try { await admins(await api('/luddite/admin/admins', { remove: a.email })); } catch (e) { failed(e); }
+        } })]) : null
+      ]));
+    });
+    var form = null;
+    if (me.canGrant) {
+      var input = h('input', { type: 'email', placeholder: 'name@horacemann.org', 'aria-label': 'Email address', required: '' });
+      var note = h('p', { class: 'sub' });
+      form = h('form', { onsubmit: async function (ev) {
+        ev.preventDefault();
+        var email = input.value.trim().toLowerCase();
+        if (!/@horacemann\.org$/.test(email)) { note.textContent = 'Administrators must have an @horacemann.org address.'; return; }
+        try { await admins(await api('/luddite/admin/admins', { add: email })); } catch (e) { failed(e); }
+      } }, [h('h2', { text: 'Add an administrator' }), h('p', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [input, h('button', { type: 'submit', text: 'Add' })]), note]);
+    }
+    show(h('h1', { text: 'Administrators' }),
+      h('p', { class: 'sub', text: 'Administrators can read everything Horace Mann teachers and students have written in Luddite HM. ' + (me.manager ? 'You can add and remove administrators, but you can’t see any work yourself.' : me.primary ? 'As the primary administrator, you can add and remove the others.' : 'The primary administrator adds and removes the others.') }),
+      list, form);
+  }
+
+  async function log() {
+    var entries = (await api('/luddite/admin/log')).entries;
+    var what = { overview: 'Listed all teachers', session: 'Opened writing session', paper: 'Opened paper', draft: 'Opened draft', 'class': 'Opened class', 'added admin': 'Added administrator', 'removed admin': 'Removed administrator' };
+    var rows = entries.map(function (e) { return h('tr', {}, [h('td', { text: when(e.at) }), h('td', { text: e.email }), h('td', { text: what[e.what] || e.what }), h('td', { text: e.label })]); });
+    show(h('h1', { text: 'Access log' }), h('p', { class: 'sub', text: 'Every look an administrator has taken, newest first (the last 500).' }),
+      h('div', { class: 'scroll' }, [h('table', {}, [h('tr', {}, ['When', 'Who', 'What', ''].map(function (x) { return h('th', { text: x }); }))].concat(rows))]));
+  }
+
+  // ---- Pages ----
+  async function route() {
+    var parts = location.hash.replace(/^#/, '').split('/').map(decodeURIComponent);
+    if (me.manager) parts = ['admins'];
+    var tab = { admins: 'admins', log: 'log' }[parts[0]] || 'teachers';
+    document.querySelectorAll('nav a').forEach(function (a) { a.classList.toggle('on', a.dataset.tab === tab); });
+    window.scrollTo(0, 0);
+    try {
+      if (parts[0] === 't') await teacher(parts[1]);
+      else if (parts[0] === 's') await session(parts[1]);
+      else if (parts[0] === 'p') await paper(parts[1]);
+      else if (parts[0] === 'd') await draft(parts[1], parts[2]);
+      else if (parts[0] === 'c') await klass(parts[1]);
+      else if (parts[0] === 'admins') await admins();
+      else if (parts[0] === 'log') await log();
+      else await teachers();
+    } catch (e) { failed(e); }
+  }
+
+  async function start() {
+    try { token = localStorage.getItem(AUTH_KEY); } catch (e) { token = null; }
+    if (!token) {
+      show(h('div', { class: 'msg' }, [h('p', {}, ['Sign in to ', h('a', { href: './', text: 'Luddite HM' }), ' with your @horacemann.org account first, then come back to this page.'])]));
+      return;
+    }
+    try { me = (await api('/luddite/admin/me')).admin; } catch (e) { return failed(e); }
+    document.getElementById('who').textContent = me.email + (me.primary ? ' · primary administrator' : me.manager ? ' · manages administrators' : '');
+    if (me.manager) {
+      // Jake runs the service but doesn't see Horace Mann's work: only the list of administrators.
+      document.querySelectorAll('nav a:not([data-tab=admins])').forEach(function (a) { a.remove(); });
+    } else {
+      document.getElementById('note').hidden = false;
+    }
+    document.getElementById('nav').hidden = false;
+    window.addEventListener('hashchange', route);
+    route();
+  }
+  start();
+})();
+</script>
+</body>
+</html>
