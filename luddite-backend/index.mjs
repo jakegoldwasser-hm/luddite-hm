@@ -1,4 +1,4 @@
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { createHmac, timingSafeEqual, randomUUID, randomBytes } from 'node:crypto';
 
 // The AWS Lambda behind Luddite (/luddite/ on the site): assignments,
@@ -288,8 +288,15 @@ async function getRoom(code) {
   return state;
 }
 
+// An owner's reach into other teachers' work stops at Horace Mann teachers:
+// Luddite HM's students' work is not open to the site's owner (Jake asked for
+// this). Horace Mann's own administrators read it through routeHmAdmin.
+function ownerMayOpen(role, teacherEmail) {
+  return role === 'owner' && !isHm(teacherEmail);
+}
+
 function ownsRoom(room, info, role) {
-  return room.teacher.sub === info.sub || role === 'owner';
+  return room.teacher.sub === info.sub || ownerMayOpen(role, room.teacher.email);
 }
 
 // ---- When an assignment runs ----
@@ -422,7 +429,7 @@ async function getClass(id, me, role) {
   if (!/^[a-f0-9]{12}$/.test(key)) throw new HttpError(404, 'no_class');
   const { state } = await readItem('luddite:class:' + key);
   if (!state || state.deletedAt) throw new HttpError(404, 'no_class');
-  if (state.teacher.sub !== me.sub && role !== 'owner') throw new HttpError(403, 'not_your_class');
+  if (state.teacher.sub !== me.sub && !ownerMayOpen(role, state.teacher.email)) throw new HttpError(403, 'not_your_class');
   return state;
 }
 
@@ -625,13 +632,16 @@ async function updateDriveDoc(teacherSub, piece) {
 }
 
 // ---- Marks ----
-// The piece's own teacher (or an owner) may read and mark it.
+// The piece's own teacher (or an owner, except for Horace Mann teachers' papers) may read and mark it.
 async function ownSub(id, me, role) {
   const key = String(id || '');
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(key)) throw new HttpError(404, 'no_sub');
   const { state } = await readItem('luddite:sub:' + key);
   if (!state) throw new HttpError(404, 'no_sub');
-  if (state.teacherSub !== me.sub && role !== 'owner') throw new HttpError(403, 'not_your_student');
+  if (state.teacherSub !== me.sub) {
+    const { state: room } = await readItem('luddite:room:' + state.code);
+    if (!room || !ownerMayOpen(role, room.teacher.email)) throw new HttpError(403, 'not_your_student');
+  }
   return state;
 }
 
@@ -686,6 +696,9 @@ async function routeLuddite(event, method, path, info) {
   const role = await roleOf(info);
   const isTeacher = role === 'owner' || role === 'teacher';
   const me = { sub: info.sub, email: info.email || '', name: info.name || '' };
+
+  // Luddite HM's administrators: read-only, from the Luddite HM page only (see routeHmAdmin).
+  if (path.startsWith('/luddite/admin/')) return routeHmAdmin(event, method, path, q, body, me);
 
   // GET /luddite/status -- who is this, and what can they do?
   if (path === '/luddite/status' && method === 'GET') {
@@ -1210,6 +1223,214 @@ async function routeLuddite(event, method, path, info) {
     }
     const emails = (state && state.emails) || {};
     return respond(200, { owners: OWNER_EMAILS, teachers: Object.keys(emails).sort().map((email) => ({ email, addedAt: emails[email].addedAt })) });
+  }
+
+  return respond(404, { error: 'Not found' });
+}
+
+// ---------------------------------------------------------------------
+// Luddite HM administrators
+// ---------------------------------------------------------------------
+// Horace Mann's administration can read everything that Horace Mann
+// teachers and their students have written in Luddite HM: writing
+// sessions and their prompts, classes, rubrics, students' backed-up drafts,
+// papers, and every teacher's mark-up, end comment and grade. It is
+// read-only (an administrator can't change, mark up or hand back anything),
+// and it is Luddite HM's alone:
+//   - the request has to come from the Luddite HM page: its Origin header
+//     (which the browser sets, and a page can't fake) must be HM_ORIGIN, so
+//     the regular Luddite page at jake-goldwasser.com can't reach any of it;
+//   - the person has to be signed in with an @horacemann.org account that
+//     is on the administrator list;
+//   - and they only ever see work whose teacher has an @horacemann.org
+//     address (never a regular Luddite teacher's).
+// The primary administrator (HM_PRIMARY_ADMINS, Cassandra Parets) can't be
+// removed, and adds or removes other administrators (any @horacemann.org
+// address). Jake (HM_ADMIN_MANAGERS) can also add and remove them, but sees
+// nothing else: no work, no access log. Every look an administrator takes is written
+// to a log that the administrators can read.
+//   luddite:hmadmins     { emails: { [email]: { addedAt, addedBy } } }
+//   luddite:hmadminlog   { entries: [{ at, email, what, id, label }] } newest first
+// Listing everything needs dynamodb:Scan on the table (README.md, step 3).
+const HM_ORIGIN = 'https://jakegoldwasser-hm.github.io';
+const HM_PRIMARY_ADMINS = ['cassandra_parets@horacemann.org'];
+// Can add and remove administrators, but can't read anyone's work or the
+// access log: Jake runs the service and asked not to see Horace Mann's data.
+const HM_ADMIN_MANAGERS = ['jake_goldwasser@horacemann.org'];
+const HM_LOG_MAX = 1500;
+const isHm = (email) => /@horacemann\.org$/.test(lower(email));
+
+async function hmAdminOf(email) {
+  const em = lower(email);
+  if (!isHm(em)) return null;
+  if (HM_PRIMARY_ADMINS.includes(em)) return 'primary';
+  if (HM_ADMIN_MANAGERS.includes(em)) return 'manager';
+  const { state } = await readItem('luddite:hmadmins');
+  return state && state.emails && state.emails[em] ? 'admin' : null;
+}
+
+// Every item whose key starts with one of the prefixes.
+async function scanPrefixes(prefixes) {
+  const out = [];
+  let start;
+  do {
+    let res;
+    try {
+      res = await ddb.send(new ScanCommand({
+        TableName: TABLE_NAME, ExclusiveStartKey: start,
+        FilterExpression: prefixes.map((_, i) => 'begins_with(pk, :p' + i + ')').join(' OR '),
+        ExpressionAttributeValues: Object.fromEntries(prefixes.map((p, i) => [':p' + i, { S: p }]))
+      }));
+    } catch (e) {
+      if (e.name === 'AccessDeniedException') throw new HttpError(503, 'needs_scan_permission');
+      throw e;
+    }
+    for (const it of res.Items || []) {
+      try { out.push({ pk: it.pk.S, state: JSON.parse(it.state.S) }); } catch (e) { /* not one of ours */ }
+    }
+    start = res.LastEvaluatedKey;
+  } while (start);
+  return out;
+}
+
+async function hmLog(email, what, id, label) {
+  await mutate('luddite:hmadminlog', (l) => ({
+    entries: [{ at: Date.now(), email: lower(email), what, id: String(id || ''), label: String(label || '').slice(0, 120) },
+      ...((l && l.entries) || [])].slice(0, HM_LOG_MAX)
+  }));
+}
+
+// A writing session an administrator may read, or a 404 (never a hint
+// that a regular Luddite session exists).
+async function hmRoom(code) {
+  const { state } = await readItem('luddite:room:' + cleanCode(code));
+  if (!state || !state.teacher || !isHm(state.teacher.email)) throw new HttpError(404, 'not_found');
+  return state;
+}
+
+async function adminList() {
+  const { state } = await readItem('luddite:hmadmins');
+  const emails = (state && state.emails) || {};
+  return {
+    primary: HM_PRIMARY_ADMINS,
+    managers: HM_ADMIN_MANAGERS,
+    admins: Object.keys(emails).filter((e) => !HM_PRIMARY_ADMINS.includes(e) && !HM_ADMIN_MANAGERS.includes(e)).sort()
+      .map((email) => ({ email, addedAt: emails[email].addedAt, addedBy: emails[email].addedBy || '' }))
+  };
+}
+
+async function routeHmAdmin(event, method, path, q, body, me) {
+  const origin = event.headers?.origin || event.headers?.Origin || '';
+  if (origin !== HM_ORIGIN) return respond(404, { error: 'Not found' });
+  const level = await hmAdminOf(me.email);
+  if (!level) return respond(403, { error: 'not_admin' });
+  const canGrant = level === 'primary' || level === 'manager';
+
+  // GET /luddite/admin/me -- am I an administrator? (The page's banner.)
+  if (path === '/luddite/admin/me' && method === 'GET') {
+    return respond(200, { admin: { email: lower(me.email), primary: level === 'primary', manager: level === 'manager', canGrant } });
+  }
+
+  // A manager only manages the list of administrators.
+  if (level === 'manager' && path !== '/luddite/admin/admins') return respond(403, { error: 'manager_only_admins' });
+
+  // GET /luddite/admin/overview -- every Horace Mann teacher, with their
+  // writing sessions, classes and rubrics.
+  if (path === '/luddite/admin/overview' && method === 'GET') {
+    const items = await scanPrefixes(['luddite:room:', 'luddite:class:', 'luddite:teacher:']);
+    const teachers = new Map();
+    const teacherOf = (t) => {
+      if (!t || !t.sub || !isHm(t.email)) return null;
+      if (!teachers.has(t.sub)) teachers.set(t.sub, { sub: t.sub, email: lower(t.email), name: t.name || '', sessions: [], classes: [], rubrics: [], displayName: '' });
+      return teachers.get(t.sub);
+    };
+    for (const { pk, state: s } of items) {
+      if (pk.startsWith('luddite:room:')) {
+        const t = teacherOf(s.teacher);
+        if (!t) continue;
+        const sum = roomSummary(s);
+        t.sessions.push({ ...sum, prompt: shortPrompt(s.prompt), students: Object.keys(s.students || {}).length, deleted: !!s.deletedAt });
+      } else if (pk.startsWith('luddite:class:')) {
+        const t = teacherOf(s.teacher);
+        if (t) t.classes.push({ id: s.id, name: s.name, count: (s.emails || []).length, createdAt: s.createdAt, deleted: !!s.deletedAt });
+      }
+    }
+    for (const { pk, state: s } of items) {
+      if (!pk.startsWith('luddite:teacher:')) continue;
+      const t = teachers.get(pk.slice('luddite:teacher:'.length));
+      if (!t) continue;
+      t.displayName = s.displayName || '';
+      t.rubrics = s.rubrics || [];
+      t.studentCount = Object.keys(s.students || {}).length;
+    }
+    const list = [...teachers.values()].sort((a, b) => (a.displayName || a.name || a.email).localeCompare(b.displayName || b.name || b.email));
+    for (const t of list) { t.sessions.sort((a, b) => (b.startAt || b.createdAt || 0) - (a.startAt || a.createdAt || 0)); t.classes.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); }
+    await hmLog(me.email, 'overview', '', 'All teachers');
+    return respond(200, { teachers: list });
+  }
+
+  // GET /luddite/admin/session?code= -- one writing session as its teacher
+  // sees it: prompt, students, live status, papers.
+  if (path === '/luddite/admin/session' && method === 'GET') {
+    const room = await hmRoom(q.code);
+    await hmLog(me.email, 'session', room.code, titleOf(room) + ' (' + room.teacher.email + ')');
+    return respond(200, { room: { ...room, title: titleOf(room) }, roster: await rosterOf(room) });
+  }
+
+  // GET /luddite/admin/paper?id= -- one handed-in paper with its mark-up,
+  // end comment, grade and rubric scores.
+  if (path === '/luddite/admin/paper' && method === 'GET') {
+    const id = String(q.id || '');
+    const { state: paper } = await readItem('luddite:sub:' + id);
+    if (!paper) throw new HttpError(404, 'not_found');
+    const room = await hmRoom(paper.code);
+    await hmLog(me.email, 'paper', id, (paper.name || paper.email) + ', ' + titleOf(room));
+    // markedHtml: the paper with its mark-up, as it goes to Drive (everything in it escaped).
+    return respond(200, { paper, markedHtml: markedHtml(paper), roomRubric: room.rubric || null, teacher: room.teacher });
+  }
+
+  // GET /luddite/admin/draft?code=&sub= -- a student's backed-up writing.
+  if (path === '/luddite/admin/draft' && method === 'GET') {
+    const room = await hmRoom(q.code);
+    const sub = String(q.sub || '');
+    const s = (room.students || {})[sub];
+    if (!s) throw new HttpError(404, 'not_found');
+    const { state: draft } = await readItem('luddite:draft:' + room.code + ':' + sub);
+    await hmLog(me.email, 'draft', room.code + ':' + sub, (s.name || s.email) + ', ' + titleOf(room));
+    return respond(200, { draft: draft || null, student: { name: s.name, email: s.email } });
+  }
+
+  // GET /luddite/admin/class?id= -- a class and its list of addresses.
+  if (path === '/luddite/admin/class' && method === 'GET') {
+    const { state: cls } = await readItem('luddite:class:' + String(q.id || ''));
+    if (!cls || !cls.teacher || !isHm(cls.teacher.email)) throw new HttpError(404, 'not_found');
+    await hmLog(me.email, 'class', cls.id, cls.name + ' (' + cls.teacher.email + ')');
+    return respond(200, { class: cls });
+  }
+
+  // GET /luddite/admin/log -- who has looked at what.
+  if (path === '/luddite/admin/log' && method === 'GET') {
+    const { state } = await readItem('luddite:hmadminlog');
+    return respond(200, { entries: ((state && state.entries) || []).slice(0, 500) });
+  }
+
+  // GET /luddite/admin/admins; PUT { add: email } or { remove: email }
+  // (primary administrators only).
+  if (path === '/luddite/admin/admins') {
+    if (method === 'PUT') {
+      if (!canGrant) throw new HttpError(403, 'primary_only');
+      const add = lower(body.add), remove = lower(body.remove);
+      if (add && (!EMAIL_RE.test(add) || !isHm(add))) throw new HttpError(400, 'horacemann_only');
+      if (remove && (HM_PRIMARY_ADMINS.includes(remove) || HM_ADMIN_MANAGERS.includes(remove))) throw new HttpError(400, 'cannot_remove_primary');
+      await mutate('luddite:hmadmins', (a) => {
+        const emails = { ...((a && a.emails) || {}) };
+        if (add && !HM_PRIMARY_ADMINS.includes(add) && !HM_ADMIN_MANAGERS.includes(add) && !emails[add]) emails[add] = { addedAt: Date.now(), addedBy: lower(me.email) };
+        if (remove) delete emails[remove];
+        return { emails };
+      });
+      await hmLog(me.email, add ? 'added admin' : 'removed admin', add || remove, add || remove);
+    }
+    return respond(200, await adminList());
   }
 
   return respond(404, { error: 'Not found' });
