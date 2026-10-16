@@ -53,6 +53,10 @@
   input[type=search], input[type=email] { font: inherit; padding: 8px 12px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card); width: 100%; max-width: 380px; }
   button { font: 600 14px/1 var(--ui); padding: 9px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   button.quiet { background: transparent; color: var(--ink); border-color: var(--edge); font-weight: 400; }
+  .chat { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .chat p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat p b { font-weight: 600; }
+  .chat p .at { color: var(--muted); font-size: 13px; margin-left: 6px; }
   .prompt, .writing { font: 17px/1.65 var(--display); white-space: pre-wrap; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; overflow-wrap: anywhere; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--card); }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
@@ -263,7 +267,18 @@
     show(crumbs([['#teachers', 'Teachers'], teacherCrumb(d.teacher.sub, d.teacher.email), ['#s/' + enc(p.code), p.roomTitle || p.code]]),
       h('h1', { text: p.name || p.email }), facts,
       rubric ? h('h2', { text: 'Rubric' }) : null, rubric ? rubricTable(rubric, p.rubricScores) : null,
-      h('h2', { text: 'Paper and mark-up' }), frame);
+      h('h2', { text: 'Paper and mark-up' }), frame,
+      h('h2', { text: 'Chat while writing' }), chatList(p, d.teacher));
+  }
+  // The chat between the teacher and the student while they wrote, kept with the paper at hand-in.
+  function chatList(p, teacher) {
+    var msgs = p.chat || [];
+    if (!msgs.length) return h('p', { class: 'sub', text: 'No chat.' });
+    var tname = teacher.name || teacher.email, sname = p.name || p.email;
+    return h('div', { class: 'chat' }, msgs.map(function (m) {
+      return h('p', {}, [h('b', { text: (m.from === 'teacher' ? tname : sname) + ':' }), ' ' + m.text,
+        h('span', { class: 'at', text: (m.all ? 'to everyone · ' : '') + when(m.at) })]);
+    }));
   }
 
   async function draft(code, sub) {
