@@ -269,15 +269,15 @@
       h('h1', { text: p.name || p.email }), facts,
       rubric ? h('h2', { text: 'Rubric' }) : null, rubric ? rubricTable(rubric, p.rubricScores) : null,
       h('h2', { text: 'Paper and mark-up' }), frame,
-      h('h2', { text: 'Chat while writing' }), chatList(p, d.teacher));
+      h('h2', { text: 'Messages while writing' }), chatList(p, d.teacher));
   }
-  // The chat between the teacher and the student while they wrote, kept with the paper at hand-in.
+  // The messages between the teacher and the student while they wrote, kept with the paper at hand-in.
   function chatList(p, teacher) {
     var msgs = p.chat || [];
-    if (!msgs.length) return h('p', { class: 'sub', text: 'No chat.' });
+    if (!msgs.length) return h('p', { class: 'sub', text: 'No messages.' });
     var tname = teacher.name || teacher.email, sname = p.name || p.email;
     return h('div', { class: 'chat' }, msgs.map(function (m) {
-      return h('p', {}, [h('b', { text: (m.from === 'teacher' ? tname : sname) + ':' }), ' ' + m.text,
+      return h('p', {}, [h('b', { text: (m.from === 'teacher' ? tname : sname) + (m.hand ? ' (raised hand)' : '') + ':' }), ' ' + m.text,
         h('span', { class: 'at', text: (m.all ? 'to everyone · ' : '') + when(m.at) })]);
     }));
   }
