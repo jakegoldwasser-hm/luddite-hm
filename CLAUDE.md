@@ -17,7 +17,7 @@
   Horace Mann-only sign-in, and the administrators' script). **All HM differences in `index.html` go through `hm.sh`.**
 - `admin.html` — the administrator view (read-only access to every Horace Mann writing session, draft, paper and mark-up).
 - `hm-admin.js` — puts "Administrator" at the top of the page for administrators, linking to `admin.html`.
-- `privacy.html`, `terms.html`, `favicon.svg`, `README.md`, this file, `.github/workflows/sync.yml`.
+- `hm-shield.svg` (Horace Mann's lion shield, shown in place of "HM" after the wordmark), `privacy.html`, `terms.html`, `favicon.svg`, `README.md`, this file, `.github/workflows/sync.yml`.
 
 ## What is NOT edited here
 

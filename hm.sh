@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Turns Luddite's page (luddite/index.html in jakegoldwasser/jake-goldwasser-2026)
-# into Luddite HM's: the name with BETA, its own icon, Terms and Privacy pages,
+# into Luddite HM's: the name with the Horace Mann shield and BETA, its own icon, Terms and Privacy pages,
 # sign-in only for @horacemann.org accounts, and the administrators' link
 # (hm-admin.js).
 # Usage: ./hm.sh luddite.html > index.html
@@ -18,8 +18,8 @@ step() { # step <name> <perl substitution>
 }
 
 step title       's#<title>Luddite</title>#<title>Luddite HM</title>#'
-step wordmark    's#class="wordmark">Luddite</h#class="wordmark">Luddite HM<span class="beta">BETA</span></h#g'
-step beta-style  's#(\n  \.wordmark \{ font-family: Rokkitt[^\n]*)#$1\n  .wordmark .beta { font: 600 0.22em/1 var(--ui); letter-spacing: .08em; color: var(--muted); vertical-align: super; margin-left: .3em; }#'
+step wordmark    's#class="wordmark">Luddite</h#class="wordmark">Luddite <img class="hm" src="hm-shield.svg" alt="HM"><span class="beta">BETA</span></h#g'
+step beta-style  's#(\n  \.wordmark \{ font-family: Rokkitt[^\n]*)#$1\n  .wordmark .beta { font: 600 0.22em/1 var(--ui); letter-spacing: .08em; color: var(--muted); vertical-align: super; margin-left: .3em; }\n  .wordmark .hm { height: .8em; width: auto; vertical-align: baseline; }#'
 step favicon     's#href="\.\./favicon\.svg#href="favicon.svg#g'
 step highlight  's#src="/selection-highlight\.js#src="selection-highlight.js#'
 step terms       's#href="\.\./terms\.html"#href="terms.html"#g'
