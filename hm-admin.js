@@ -16,7 +16,7 @@
     var style = document.createElement('style');
     style.textContent =
       '.hm-admin-bar { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 9999;' +
-      ' font: 600 12px/1 "Bricolage Grotesque", system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;' +
+      ' font: 600 12px/1 "Source Sans 3", system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;' +
       ' background: #2B2118; color: #FAF6EC; padding: 6px 12px; border-radius: 0 0 8px 8px; text-decoration: none; }' +
       '.hm-admin-bar:hover { background: #55612D; }' +
       '@media print { .hm-admin-bar { display: none; } }';
