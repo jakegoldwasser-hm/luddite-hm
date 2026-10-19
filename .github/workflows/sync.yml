@@ -1,4 +1,4 @@
-# Every morning, brings in Luddite's newest page from jake-goldwasser-2026, turns it
+# Five times a day, brings in Luddite's newest page from jake-goldwasser-2026, turns it
 # into Luddite HM's with hm.sh, commits it if anything changed, and publishes the
 # site. Also runs on every push here, and by hand from the Actions tab
 # ("Sync from Luddite" -> Run workflow). If hm.sh stops fitting Luddite's page,
@@ -7,7 +7,7 @@ name: Sync from Luddite
 
 on:
   schedule:
-    - cron: '0 10 * * *'   # 6 a.m. New York (EDT), 5 a.m. in winter
+    - cron: '0 10,13,16,19,23 * * *'   # five times a day: 6 and 9 a.m., noon, 3 and 7 p.m. New York (EDT; an hour earlier in winter)
   workflow_dispatch:
   push:
     branches: [main]
