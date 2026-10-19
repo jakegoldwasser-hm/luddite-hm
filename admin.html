@@ -181,7 +181,24 @@
     return h('span', { class: 'tag', text: s.state === 'running' ? 'Happening now' : s.state === 'upcoming' ? 'Coming up' : 'Past' });
   }
 
+  // A rubric brought in whole (kind 'doc'): pasted paragraphs and tables, or a PDF.
+  function docRubric(r) {
+    if (r.fileId) {
+      return h('p', {}, [h('b', { text: (r.name || 'Rubric') + ' (PDF) ' }), h('button', { class: 'quiet', type: 'button', text: 'Open the PDF', onclick: async function () {
+        var w = window.open('', '_blank'); // opened now, so it isn't taken for a pop-up
+        var d = await api('/luddite/admin/rubricfile?id=' + enc(r.fileId));
+        var bin = atob(d.data), bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        if (w) w.location = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      } })]);
+    }
+    return h('div', {}, [h('b', { text: r.name || 'Rubric' })].concat((r.blocks || []).map(function (b) {
+      if (b.table) return h('div', { class: 'scroll' }, [h('table', {}, b.table.map(function (row) { return h('tr', {}, row.map(function (c) { return h('td', { text: c, style: 'white-space:pre-wrap' }); })); }))]);
+      return h('p', { text: b.p, style: 'white-space:pre-wrap' + (b.h ? ';font-weight:600' : '') });
+    })));
+  }
   function rubricTable(r, scores) {
+    if (r.kind === 'doc') return docRubric(r);
     var head = h('tr', {}, [h('th', { text: r.name || 'Rubric' })].concat(r.levels.map(function (l) { return h('th', { text: l }); })));
     var rows = r.rows.map(function (row, i) {
       return h('tr', {}, [h('td', { text: row.skill + (r.weighted ? ' (' + (row.weight || 0) + '%)' : '') })].concat(row.cells.map(function (c, j) {
