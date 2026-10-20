@@ -29,7 +29,7 @@ step hd-hint     's#(use_fedcm_for_prompt: true, itp_support: true)#$1, hd: '\''
 step hm-only     's#(\n(\s*)me = data\.luddite;\n)#$1$2if (!/\@horacemann\\.org\$/i.test(me.email || '\'''\'')) { signOut(); \$('\''signInNote'\'').textContent = '\''Luddite HM is only for Horace Mann accounts. Sign in with your \@horacemann.org address.'\''; return; }\n#'
 
 # Horace Mann administrators get "Administrator" at the top, linking to admin.html.
-step hm-admin   's#</body>#<script src="hm-admin.js" defer></script>\n</body>#'
+step hm-admin   's#</body>(?!.*</body>)#<script src="hm-admin.js" defer></script>\n</body>#s'
 
 cat "$tmp"
 rm -f "$tmp"
