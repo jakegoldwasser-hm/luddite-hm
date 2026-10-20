@@ -183,6 +183,9 @@ async function prefsOf(teacherSub) {
 const UPCOMING_HORIZON_MS = 48 * 60 * 60 * 1000;
 // A paper handed in this long after a student's time ran out is marked late.
 const LATE_GRACE_MS = 2 * 60 * 1000;
+// A student on an alternative schedule (own time) has five minutes after
+// their time ends to finish; then their page hands in by itself.
+const OWN_GRACE_MS = 5 * 60 * 1000;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // What students see the owners as until they pick something else.
 const OWNER_DISPLAY_NAME = 'Mr. Goldwasser';
@@ -345,15 +348,43 @@ function sittingsWindow(room, email, entry, now) {
   const o = room.own && room.own[email];
   const multiplier = (o && o.multiplier) || 1;
   const list = room.sittings.map((x) => ({ start: x.start, end: x.start + Math.round((x.end - x.start) * multiplier) }));
+  return { ...partsWindow(list, room, entry, now), own: !!o, multiplier, ended: o ? false : regularEnded(room) };
+}
+// Writing only during these blocks of time, paused between them.
+function partsWindow(list, room, entry, now) {
   const at = list.findIndex((x) => now >= x.start && now < x.end);
   const next = list.findIndex((x) => x.start > now);
   const between = at === -1 && next > 0;
   return {
-    start: list[0].start, end: list[list.length - 1].end, own: !!o, multiplier, ended: o ? false : regularEnded(room),
+    start: list[0].start, end: list[list.length - 1].end,
     paused: !!(room.pausedAt || (entry && entry.pausedAt) || between),
     sitting: at !== -1 ? at + 1 : between ? next : 0, sittings: list.length,
     sittingEnd: at !== -1 ? list[at].end : null, nextAt: between ? list[next].start : null
   };
+}
+// An alternative schedule in parts (`blocks`: [{ start, end }]): a student
+// takes the paper in pieces, say the first half of D period and then all of
+// H, with the writing kept between them. 1 to MAX_BLOCKS, each up to 6 hours,
+// put in order, not overlapping.
+const MAX_BLOCKS = 8;
+function cleanBlocks(x) {
+  if (!Array.isArray(x) || !x.length) return null;
+  if (x.length > MAX_BLOCKS) throw new HttpError(400, 'too_many_blocks');
+  const list = x.map((b) => ({ start: Math.floor(Number(b && b.start)), end: Math.floor(Number(b && b.end)) })).sort((a, b) => a.start - b.start);
+  list.forEach((b, i) => {
+    if (!(b.start > 0 && b.end > b.start && b.end - b.start <= 6 * 3600000)) throw new HttpError(400, 'bad_time');
+    if (i && b.start < list[i - 1].end) throw new HttpError(400, 'overlap');
+  });
+  return list;
+}
+// Unlocked (or let write again after handing in) once their time was over --
+// the session ended, or their own time ran out: they can write again, with no
+// time limit, until they hand in, someone hands in for them, or the teacher
+// ends the session again.
+function reopenedAt(room, entry, win) {
+  const at = entry ? Math.max(entry.unlockedAt || 0, entry.releasedAt || 0) : 0;
+  if (!at) return 0;
+  return (room.endedAt && at > room.endedAt) || (win.end && at >= win.end) ? at : 0;
 }
 // Sittings a teacher sends: 2 to MAX_SITTINGS, each up to 6 hours, in order, not overlapping.
 function cleanSittings(x) {
@@ -378,7 +409,14 @@ function startedNow(r, now) {
   return { ...base, sittings: undefined };
 }
 function windowOf(room, email, entry) {
+  const win = baseWindowOf(room, email, entry);
+  if (!reopenedAt(room, entry, win)) return win;
+  return { ...win, end: null, home: true, ended: false, paused: !!(room.pausedAt || (entry && entry.pausedAt)), sitting: 0, sittings: 0, sittingEnd: null, nextAt: null, reopened: true };
+}
+function baseWindowOf(room, email, entry) {
   const now = Date.now();
+  const ob = room.own && room.own[email];
+  if (ob && ob.blocks && !room.atHome) return { ...partsWindow(ob.blocks, room, entry, now), own: true, multiplier: 1, ended: false, parts: true };
   if (room.sittings && !room.atHome) return sittingsWindow(room, email, entry, now);
   const reg = regularWindow(room);
   const paused = !!(room.pausedAt || (entry && entry.pausedAt));
@@ -483,7 +521,9 @@ function studentView(room, sub, email, prefs) {
     paused: win.paused,
     // Over several days: which day (sitting) it is, of how many, when today's
     // ends, and when the next one starts (between days).
-    sitting: win.sitting || 0, sittings: win.sittings || 0, sittingEnd: win.sittingEnd || null, nextAt: win.nextAt || null
+    sitting: win.sitting || 0, sittings: win.sittings || 0, sittingEnd: win.sittingEnd || null, nextAt: win.nextAt || null,
+    // An alternative schedule in parts (not days).
+    parts: !!win.parts
   };
 }
 
@@ -1379,6 +1419,7 @@ async function routeLuddite(event, method, path, info) {
       else if (body.action === 'unlock') subs.forEach((sub) => { if (students[sub]) students[sub] = { ...students[sub], lockedOut: false, askedAt: 0, unlockedAt: Date.now() }; });
       else if (body.action === 'release') subs.forEach((sub) => { if (students[sub]) students[sub] = { ...students[sub], handedIn: false, askedAt: 0, releasedAt: Date.now() }; });
       else if (body.action === 'close') return { ...r, open: false, endedAt: Date.now() };
+      else if (body.action === 'handIn') return undefined; // handed in below
       else if (body.action === 'startNow') return startedNow(r, Date.now());
       else if (body.action === 'open') return { ...r, open: true, endedAt: null, startAt: Date.now(), pausedAt: 0, pausedMs: 0, sittings: undefined };
       else if (body.action === 'pause' || body.action === 'resume') subs.forEach((sub) => { if (students[sub]) students[sub] = paused(students[sub], body.action === 'pause', Date.now()); });
@@ -1421,6 +1462,8 @@ async function routeLuddite(event, method, path, info) {
       else if (body.action === 'own') {
         if (!EMAIL_RE.test(ownEmail)) throw new HttpError(400, 'bad_email');
         const multiplier = Math.min(4, Math.max(1, Math.round((Number(body.multiplier) || 1) * 4) / 4));
+        const blocks = cleanBlocks(body.blocks);
+        if (blocks) return { ...r, own: { ...(r.own || {}), [ownEmail]: { startAt: blocks[0].start, multiplier: 1, blocks, setAt: Date.now() } } };
         const startAt = Number(body.startAt) > 0 ? Math.floor(Number(body.startAt)) : null;
         return { ...r, own: { ...(r.own || {}), [ownEmail]: { startAt, multiplier, setAt: Date.now() } } };
       }
@@ -1457,14 +1500,14 @@ async function routeLuddite(event, method, path, info) {
     // keystroke, replacing this copy.
     if (body.action === 'close') {
       const open = Object.entries(room.students).filter(([, st]) => st.status === 'admitted' && !st.handedIn && !(room.own && room.own[lower(st.email)]));
-      await inBatches(open, async ([sub, st]) => {
-        const { state: draft } = await readItem('luddite:draft:' + code + ':' + sub);
-        if (!draft || !String(draft.text || '').trim()) return;
-        const fresh = await getRoom(code);
-        await handInFor(fresh, code, { sub, email: st.email, name: st.name }, fresh.students[sub], String(draft.text).slice(0, MAX_SUBMISSION_CHARS), 'Handed in at the end', true)
-          .catch((e) => console.warn('auto hand-in failed', sub, e.message));
-      });
+      await handInFromBackups(code, open, 'Handed in at the end');
       if (open.length) return respond(200, { room: await getRoom(code) });
+    }
+    // Closing one student's paper (an alternative schedule's, say): hand in now.
+    if (body.action === 'handIn') {
+      const list = subs.map((sub) => [sub, room.students[sub]]).filter(([, st]) => st && st.status === 'admitted' && !st.handedIn);
+      await handInFromBackups(code, list, 'Handed in by the teacher');
+      return respond(200, { room: await getRoom(code) });
     }
     return respond(200, { room });
   }
@@ -1583,7 +1626,7 @@ function proctorView(room, reach) {
       sub, email: s.email, name: s.name || '', status: s.status, requestedAt: s.requestedAt || 0,
       lockedOut: !!s.lockedOut, askedAt: s.askedAt || 0, handedIn: !!s.handedIn, away: !!s.away,
       live: !!(s.writing && s.lastSeen && now - s.lastSeen < 25000), paused: !!s.pausedAt,
-      own: own[em] || null, state: stateAt(win, now), startAt: win.start, endAt: win.end
+      own: own[em] || null, state: stateAt(win, now), startAt: win.start, endAt: win.end, nextAt: win.nextAt || null
     });
   });
   // Students with own time who haven't come in yet.
@@ -1663,18 +1706,37 @@ async function routeProctor(method, path, q, body, me) {
       const whole = ['startNow', 'pauseAll', 'resumeAll'].includes(body.action);
       if (whole && reach !== 'session') throw new HttpError(403, 'not_proctor');
       if (body.action === 'admit') subs.forEach((sub) => { if (students[sub].status === 'waiting') students[sub] = { ...students[sub], status: 'admitted', decidedAt: t, via: 'proctor' }; });
-      else if (body.action === 'unlock') subs.forEach((sub) => { students[sub] = { ...students[sub], lockedOut: false, askedAt: 0, unlockedAt: t }; });
+      // Unlocking lets them write again, whatever locked them: leaving the page, handing in, or the time being up.
+      else if (body.action === 'unlock') subs.forEach((sub) => { students[sub] = { ...students[sub], lockedOut: false, askedAt: 0, unlockedAt: t, ...(students[sub].handedIn ? { handedIn: false, releasedAt: t } : {}) }; });
       else if (body.action === 'pause' || body.action === 'resume') subs.forEach((sub) => { students[sub] = paused(students[sub], body.action === 'pause', t); });
       else if (body.action === 'begin') {
         if (!EMAIL_RE.test(email)) throw new HttpError(400, 'bad_email');
         if (!own[email] && reach !== 'session') throw new HttpError(403, 'not_proctor');
+        const cur = own[email];
+        if (cur && cur.blocks) {
+          // In parts: the next part not yet started begins now, as long as it was.
+          if (cur.blocks.some((b) => t >= b.start && t < b.end)) return undefined;
+          const i = cur.blocks.findIndex((b) => b.start > t);
+          if (i === -1) throw new HttpError(409, 'no_part_left');
+          const blocks = cur.blocks.slice();
+          blocks[i] = { start: t, end: t + (blocks[i].end - blocks[i].start) };
+          if (blocks[i + 1] && blocks[i].end > blocks[i + 1].start) blocks[i].end = blocks[i + 1].start;
+          return { ...r, own: { ...own, [email]: { ...cur, blocks, startAt: blocks[0].start, setAt: t, begunBy: lower(me.email) } } };
+        }
         return { ...r, own: { ...own, [email]: { ...(own[email] || { multiplier: 1 }), startAt: t, setAt: t, begunBy: lower(me.email) } } };
       }
       else if (body.action === 'startNow') return startedNow(r, t);
       else if (body.action === 'pauseAll' || body.action === 'resumeAll') return paused(r, body.action === 'pauseAll', t);
+      else if (body.action === 'handIn') return undefined; // handed in below
       else throw new HttpError(400, 'bad_action');
       return { ...r, students };
     });
+    // Closing a student's paper: hand in now, with what they've written.
+    if (body.action === 'handIn') {
+      const list = subs.map((sub) => [sub, room.students[sub]]).filter(([, st]) => st && st.status === 'admitted' && !st.handedIn);
+      await handInFromBackups(code, list, 'Handed in by the proctor');
+      return respond(200, { session: proctorView(await getRoom(code), reach) });
+    }
     if (body.action === 'begin') {
       await mutate('luddite:mine:' + email, (m) => {
         const list = (m && m.own) || [];
@@ -1918,6 +1980,25 @@ async function classesOf(teacherState) {
   return list.map((x) => x.state).filter((c) => c && !c.deletedAt).map(classSummary);
 }
 
+// Hands in for these students now, from the backup of their writing (the
+// session ending, or a teacher or proctor closing one student's paper). With
+// nothing written they're just marked handed in, so they can't write on. Their
+// own page then hands in again with everything up to the last keystroke.
+async function handInFromBackups(code, list, label) {
+  await inBatches(list, async ([sub, st]) => {
+    const { state: draft } = await readItem('luddite:draft:' + code + ':' + sub);
+    const fresh = await getRoom(code);
+    if (!fresh.students[sub] || fresh.students[sub].handedIn) return;
+    if (!draft || !String(draft.text || '').trim()) {
+      if (label === 'Handed in at the end') return;
+      await mutate('luddite:room:' + code, (r) => (r.students[sub] ? { ...r, students: { ...r.students, [sub]: { ...r.students[sub], handedIn: true, autoHandedIn: true, askedAt: 0, writing: false } } } : undefined));
+      return;
+    }
+    await handInFor(fresh, code, { sub, email: st.email, name: st.name }, fresh.students[sub], String(draft.text).slice(0, MAX_SUBMISSION_CHARS), label, true)
+      .catch((e) => console.warn('auto hand-in failed', sub, e.message));
+  });
+}
+
 // The addresses on an assignment's class, so its teacher can see who hasn't come in.
 // Hands one student's writing in: Drive (when connected), Luddite's own copy
 // to mark up, the teacher's student list, and the room. `auto` when Luddite
@@ -1943,13 +2024,13 @@ async function handInFor(room, code, me, s, text, label, auto) {
   if (!file && !stored) throw new HttpError(409, driveError);
   const at = Date.now();
   const id = file ? file.id : 'l' + randomUUID();
-  const win = windowOf(room, lower(me.email));
+  const win = windowOf(room, lower(me.email), s);
   // A new hand-in replaces this student's earlier one in the session. The
   // earlier ones aren't deleted: their copies stay, listed in `replaces`.
   const earlier = (room.submissions || []).filter((x) => x.sub === me.sub);
   const replaces = earlier.flatMap((x) => [x.id, ...(x.replaces || [])]);
   const submission = { id, sub: me.sub, ...(auto ? { auto: true } : {}), email: me.email, name: me.name, words, leaves: s.leaves || 0, at,
-    link: file ? file.webViewLink : null, stored, driveError, marked: 0, late: !!(win.end && at > win.end + LATE_GRACE_MS),
+    link: file ? file.webViewLink : null, stored, driveError, marked: 0, late: !!(win.end && at > win.end + (win.own ? OWN_GRACE_MS : 0) + LATE_GRACE_MS),
     ...(replaces.length ? { replaces } : {}) };
   if (stored) {
     // The chat with the teacher while they wrote goes with the paper (the most
