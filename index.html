@@ -844,8 +844,9 @@
   .nextstep { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding: 14px 18px; border-radius: 16px; border: 1.5px solid; }
   .nextstep p { flex: 1; min-width: 200px; margin: 0; font: 400 20px/1.3 var(--display); }
   /* Grading still to do is yellow, never the green that reads as done. */
-  .btn.tograde, .btn.tograde:hover:not(:disabled) { background: var(--sun); border-color: var(--sun-deep); color: var(--on-sun); }
-  .btn.tograde:hover:not(:disabled) { background: #D6AE45; }
+  /* Grading's buttons are the pink of the Grade! bubble, everywhere. */
+  .btn.tograde, .btn.tograde:hover:not(:disabled) { background: #F8D9E4; border-color: #E59AB6; color: #8E2A55; }
+  .btn.tograde:hover:not(:disabled) { background: #F2C6D6; }
   .nextstep.todo { background: var(--sun-tint); border-color: var(--sun); }
   .nextstep.ready { background: var(--card); border-color: var(--mint); }
   .nextstep.done { background: var(--mint-tint); border-color: var(--mint); }
@@ -883,6 +884,10 @@
   }
   .casualcheck { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; color: var(--ink); font-size: 15px; }
   #classesBox { margin-top: 4px; }
+  .classcard .classcaret { margin-left: auto; border: 0; width: 38px; height: 38px; font-size: 24px; }
+  .classcard .classcaret:hover { background: var(--hover); }
+  .classcard .classroster { flex-basis: 100%; border-top: 1px solid var(--rule); margin-top: 4px; padding-top: 2px; cursor: default; }
+  .classcard .classroster .item { padding: 6px 4px; }
   /* Home's toggle: three big halves of one pill, the chosen one filled. */
   .hometabs { display: flex; gap: 4px; padding: 4px; margin: 4px 0 20px; border: 2px solid var(--ink); border-radius: 999px; background: var(--card); }
   .hometabs button { flex: 1; white-space: nowrap; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: 600 17px/1.2 var(--ui); padding: 11px 8px; cursor: pointer; }
@@ -1018,6 +1023,12 @@
   .reflectbox .rffoot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 12px; }
   #rfLocked { z-index: 70; }
   /* The teacher reads a reflection under the paper on the grading page. */
+  .reflectsum { margin: 10px 0 4px; padding: 12px 16px 14px; background: var(--card); border-radius: 12px; box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .reflectsum > b { display: block; font: 600 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .reflectsum .rftop { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+  .reflectsum .rfp { white-space: pre-wrap; flex: 1; }
+  .reflectsum .rfcounts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .reflectsum .rfcounts .statusbub { min-width: 0; }
   .reflectread { grid-column: 1 / -1; margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; }
   .reflectread > b { display: block; font: 600 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
   .reflectread .rtext { white-space: pre-wrap; font: 16px/1.65 Literata, Georgia, serif; }
@@ -1555,6 +1566,7 @@
       </div>
     </div>
     <div class="roomprompt" id="roomPromptLine" hidden><button type="button" class="iconbtn rpmin" id="roomPromptMore" hidden aria-label="Minimize the prompt" title="Minimize the prompt">&ndash;</button><b id="roomPromptK">Prompt</b><div class="rptext" id="roomPromptText" title="Click to edit the prompt"></div><div class="rpedit" id="roomPromptEdit" hidden><div class="field promptfield rich" id="roomPromptField" contenteditable="true" role="textbox" aria-multiline="true" aria-label="The prompt" spellcheck="true" data-placeholder="What should they write about?"></div><div class="row"><button type="button" class="btn small ghost" id="roomPromptCancel">Cancel</button><button type="button" class="btn small" id="roomPromptSave">Save</button></div></div><div class="rpfoot"><span class="rprubric" id="roomRubricLine" hidden></span></div></div>
+    <div class="reflectsum" id="roomReflectLine" hidden><b>Reflection</b><div class="rftop"><div class="rfp" id="roomReflectPrompt"></div><button type="button" class="btn small ghost" id="roomReflectEdit">Edit</button></div><div class="rfcounts" id="roomReflectCounts"></div></div>
 
     <!-- What to do next, in one line and one button: grade, hand back, or nothing left to do. -->
     <div class="nextstep" id="nextStep" hidden><p id="nextStepText"></p><button class="btn" id="nextStepBtn" type="button"></button></div>
@@ -4896,7 +4908,8 @@
       w.appendChild(el('span', null, (r.classId ? classNameOf(r.classId) : r.casual ? 'Casual session' : 'No class') + ' \u00b7 ' + label));
       it.appendChild(w);
       var go = function () { gradeSession(r.code); };
-      it.appendChild(button(btn, 'btn small' + (btn === 'Grade' ? '' : ' ghost'), go));
+      // The same bubbles as a student's row on a session's page: pink Grade!, yellow Graded.
+      it.appendChild(button(btn, 'statusbub ' + (btn === 'Grade!' ? STATUS.grade[1] : STATUS.graded[1]), go));
       it.addEventListener('click', function (e) { if (!e.target.closest('button')) go(); });
       it.addEventListener('keydown', function (e) { if (e.target === it && e.key === 'Enter') go(); });
       return it;
@@ -4905,9 +4918,9 @@
     var todo = lastSessions.filter(function (r) { return typeof r.graded === 'number' && r.submissions > r.graded; }).sort(recent);
     var done = lastSessions.filter(function (r) { return typeof r.graded === 'number' && r.submissions && r.graded >= r.submissions; }).sort(recent).slice(0, 8);
     if (!todo.length) $('gradeTodo').appendChild(el('div', 'empty', 'Nothing to grade.'));
-    todo.forEach(function (r) { var n = r.submissions - r.graded; $('gradeTodo').appendChild(row(r, plural(n, 'paper', 'papers') + ' to grade', 'Grade')); });
+    todo.forEach(function (r) { var n = r.submissions - r.graded; $('gradeTodo').appendChild(row(r, plural(n, 'paper', 'papers') + ' to grade', 'Grade!')); });
     if (!done.length) $('gradeDone').appendChild(el('div', 'empty', 'Nothing graded yet.'));
-    done.forEach(function (r) { $('gradeDone').appendChild(row(r, 'all ' + plural(r.submissions, 'paper', 'papers') + ' graded', 'Open')); });
+    done.forEach(function (r) { $('gradeDone').appendChild(row(r, 'all ' + plural(r.submissions, 'paper', 'papers') + ' graded', 'Graded')); });
   }
   async function gradeSession(code) {
     var room;
@@ -5252,6 +5265,30 @@
     var g = periodInName($('newClassName').value);
     if (g !== newClassPeriod) { newClassPeriod = g; periodSeg($('newClassPeriod'), g, function (l) { newClassPeriod = l; newClassPeriodSet = true; }); }
   });
+  var openRosters = {};
+  // A class's students, under its card: each opens everything they've handed in.
+  async function fillRoster(box, id) {
+    box.innerHTML = '';
+    box.appendChild(el('div', 'empty', 'Loading…'));
+    var emails;
+    try { emails = (await api('/luddite/class?id=' + encodeURIComponent(id)))['class'].emails; } catch (e) { box.innerHTML = ''; box.appendChild(el('div', 'empty', 'Couldn’t load the students.')); return; }
+    var names = {};
+    students.forEach(function (x) { names[x.email] = x.name; });
+    box.innerHTML = '';
+    if (!emails.length) { box.appendChild(el('div', 'empty', 'No one on this list yet.')); return; }
+    emails.slice().sort(function (a, b) { return who(names[a], a).localeCompare(who(names[b], b)); }).forEach(function (email) {
+      var row = el('div', 'item click');
+      row.tabIndex = 0;
+      var w = el('div', 'who');
+      w.appendChild(el('b', null, who(names[email], email)));
+      if (names[email]) w.appendChild(el('span', null, email));
+      row.appendChild(w);
+      var go = function (e) { if (e) e.stopPropagation(); openStudent(email, function () { showDash(); setHomeTab('students'); }); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(e); });
+      box.appendChild(row);
+    });
+  }
   function drawClasses() {
     var box = $('classList');
     box.innerHTML = '';
@@ -5269,7 +5306,25 @@
       info.appendChild(h);
       info.appendChild(el('div', 'meta', plural(c.count, 'student', 'students') + (c.period ? ' \u00b7 ' + c.period + ' period' : '')));
       card.appendChild(info);
-      card.addEventListener('click', function () { openClass(c.id); });
+      // ▾ shows the class's students right here, without opening the class.
+      var caret = el('button', 'iconbtn classcaret', openRosters[c.id] ? '\u25b4' : '\u25be');
+      caret.type = 'button';
+      caret.title = 'Show the students';
+      caret.setAttribute('aria-expanded', String(!!openRosters[c.id]));
+      var roster = el('div', 'classroster');
+      roster.hidden = !openRosters[c.id];
+      if (openRosters[c.id]) fillRoster(roster, c.id);
+      caret.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openRosters[c.id] = !openRosters[c.id];
+        roster.hidden = !openRosters[c.id];
+        caret.textContent = openRosters[c.id] ? '\u25b4' : '\u25be';
+        caret.setAttribute('aria-expanded', String(!!openRosters[c.id]));
+        if (openRosters[c.id]) fillRoster(roster, c.id);
+      });
+      card.appendChild(caret);
+      card.appendChild(roster);
+      card.addEventListener('click', function (e) { if (!e.target.closest('.classroster')) openClass(c.id); });
       card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openClass(c.id); } });
       box.appendChild(card);
     });
@@ -6052,7 +6107,8 @@
     chip.className = 'chip ' + state;
     $('reflectBtn').textContent = room.reflect ? 'Reflection…' : 'Ask for a reflection…';
     $('reflectOffBtn').hidden = !room.reflect;
-    $('roomWhen').textContent = (room.reflect ? 'Reflection asked for · ' : '') + (room.atHome ? 'At home · ' : '') + (room.shareWork ? 'Students see each other’s work · ' : '') + whenRange({ startAt: room.startAt, createdAt: room.createdAt, endedAt: room.endedAt, state: state, sittings: room.sittings, atHome: room.atHome }) + (room.casual ? ' · Casual' : room.classId ? '' : teacherRoster && !teacherRoster.id ? ' · ' + plural(teacherRoster.emails.length, 'invited student', 'invited students') : ' · No class');
+    drawReflectSummary(room);
+    $('roomWhen').textContent = (room.atHome ? 'At home · ' : '') + (room.shareWork ? 'Students see each other’s work · ' : '') + whenRange({ startAt: room.startAt, createdAt: room.createdAt, endedAt: room.endedAt, state: state, sittings: room.sittings, atHome: room.atHome }) + (room.casual ? ' · Casual' : room.classId ? '' : teacherRoster && !teacherRoster.id ? ' · ' + plural(teacherRoster.emails.length, 'invited student', 'invited students') : ' · No class');
     if (phraseNext) { phraseNext = false; $('phraseBox').hidden = false; $('phraseCancel').hidden = false; }
     drawRoomPrompt(room.prompt || '');
     var rl = $('roomRubricLine');
@@ -6881,6 +6937,31 @@
     roomAction('reflect', [], { prompt: t.trim(), showGrading: show });
     applyToOthers(picked, { action: 'reflect', prompt: t.trim(), showGrading: show });
   });
+  // A session asking for reflections says so under its prompt: the
+  // reflection prompt, and how many have handed one in, are reflecting, or
+  // haven't started (of the students handed in).
+  function drawReflectSummary(room) {
+    var rf = room.reflect;
+    $('roomReflectLine').hidden = !rf;
+    if (!rf) return;
+    $('roomReflectPrompt').textContent = '';
+    if (rf.prompt) fmtInto($('roomReflectPrompt'), rf.prompt); else $('roomReflectPrompt').textContent = 'No prompt: students write their own thoughts.';
+    var n = { done: 0, on: 0, none: 0 };
+    Object.keys(room.students || {}).forEach(function (sub) {
+      var st = room.students[sub];
+      if (st.status !== 'admitted' || !st.handedIn) return;
+      if (st.reflect && st.reflect.status === 'done') n.done++;
+      else if (st.reflect) n.on++;
+      else n.none++;
+    });
+    var box = $('roomReflectCounts');
+    box.innerHTML = '';
+    box.appendChild(el('span', 'statusbub green', n.done + ' handed in'));
+    box.appendChild(el('span', 'statusbub yellow', n.on + ' reflecting'));
+    box.appendChild(el('span', 'statusbub gray', n.none + ' not started'));
+    if (rf.showGrading) box.appendChild(el('span', 'fine', 'They see your comments and grade.'));
+  }
+  $('roomReflectEdit').addEventListener('click', function () { $('reflectBtn').click(); });
   $('reflectOffBtn').addEventListener('click', async function () {
     if (!await ask({ title: 'Stop asking for reflections?', text: 'Students can’t start or go on with one. Reflections already written stay with their papers.', ok: 'Stop asking' })) return;
     roomAction('reflectOff', []);
@@ -7035,8 +7116,9 @@
     $('endPrint').textContent = piece.endComment || '';
     // The student's reflection on it, if they've written one.
     var rfl = piece.reflection;
-    $('markReflect').hidden = !(rfl && rfl.text);
-    $('markReflectK').textContent = rfl && rfl.handedInAt ? 'Reflection · handed in ' + dayClock(rfl.handedInAt) : 'Reflection · still being written';
+    // (only once handed in: a reflection still being written isn't ready to read)
+    $('markReflect').hidden = !(rfl && rfl.text && rfl.handedInAt);
+    $('markReflectK').textContent = rfl && rfl.handedInAt ? 'Reflection · handed in ' + dayClock(rfl.handedInAt) : '';
     $('markReflectText').textContent = rfl ? rfl.text || '' : '';
     drawStock();
     $('markGrade').value = piece.grade || '';
