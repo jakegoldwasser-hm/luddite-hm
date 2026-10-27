@@ -1328,7 +1328,12 @@
      12 labels in capitals. Weights 400 and 600 only. ---- */
   body { font: 400 16px/1.55 var(--ui); }
   /* Headings and names */
-  .head h2, #lockScreen h2 { font: 600 34px/1.15 var(--ui); letter-spacing: -.01em; text-wrap: balance; }
+  .head h2, #lockScreen h2, .readytitle { font: 600 34px/1.15 var(--ui); letter-spacing: -.01em; text-wrap: balance; }
+  .readytitle { margin: 0 0 6px; }
+  /* In a session, the assignment is what the student came for; Luddite is just the masthead over it. */
+  #readyScreen.insession .wordmark { font-size: 24px; margin: 0 0 20px; color: var(--muted); }
+  /* Luddite HM's BETA tag is sized in em, which would shrink it past reading here. */
+  #readyScreen.insession .wordmark .beta { font-size: 9px; }
   h3.sect, .panelhead h3.sect, .panelhead h3.sect.big, .overlay h2, .handin h2, .newroombox > summary.bigstart,
   .page h3:not(.sect) { font: 600 25px/1.25 var(--ui); letter-spacing: -.005em; text-transform: none; color: var(--ink); text-wrap: balance; }
   .rcard h4, .panel .rcard h4, .classcard h4, .panel .classcard h4, .piece h4, .sheethead b, .item .who b,
@@ -1421,7 +1426,8 @@
 <!-- Ready to write -->
 <section class="screen" id="readyScreen" hidden>
   <div class="card">
-    <h1 class="wordmark">Luddite <img class="hm" src="hm-shield.svg" alt="HM"><span class="beta">BETA</span></h1>
+    <h2 class="wordmark">Luddite <img class="hm" src="hm-shield.svg" alt="HM"><span class="beta">BETA</span></h2>
+    <h1 class="readytitle" id="readyTitle" hidden></h1>
     <p class="sub" id="readyRoom"></p>
     <p class="sub" id="readyWindow" hidden></p>
     <div class="readyprompt" id="readyPrompt" hidden><b>Prompt</b><span id="readyPromptText"></span></div>
@@ -1437,7 +1443,6 @@
     <p class="fine" id="lastSession" hidden></p>
     <div class="row readyacts">
       <span id="dashWrap" hidden><button class="btn ghost" id="dashLink">&larr; Home</button></span>
-      <span id="leaveWrap" hidden><button class="btn small ghost" id="leaveRoomBtn2">Leave this writing session</button></span>
       <span id="newPageWrap" hidden><button class="btn small danger" id="newPageBtn">Clear the page</button></span>
     </div>
     <p class="fine" id="readyWho"><span class="who-email"></span></p>
@@ -2835,11 +2840,11 @@
       var who = el('div', 'who');
       who.appendChild(el('b', null, a.title));
       var line = a.state === 'running'
-        ? a.teacherName + (a.endAt ? ' \u00b7 until ' + whenLabel(a.endAt) : '') + (a.own && a.multiplier > 1 ? ' \u00b7 extra time' : '')
+        ? a.teacherName + (a.handedIn ? ' \u00b7 handed in' : (a.endAt ? ' \u00b7 until ' + whenLabel(a.endAt) : '') + (a.own && a.multiplier > 1 ? ' \u00b7 extra time' : ''))
         : a.teacherName + ' \u00b7 opens ' + whenLabel(a.startAt) + (a.own ? ' (your own schedule)' : '');
       who.appendChild(el('span', null, line));
       row.appendChild(who);
-      if (a.state === 'running') row.appendChild(button(a.handedIn ? 'Open' : 'Enter', 'btn small', function () { roomCode = a.code; joinRoom(a.code); }));
+      if (a.state === 'running') row.appendChild(button(a.handedIn ? 'Ask to unlock' : 'Enter', a.handedIn ? 'btn small ghost' : 'btn small', function () { roomCode = a.code; joinRoom(a.code); }));
       else row.appendChild(el('span', 'pill', 'Not started'));
       box.appendChild(row);
     });
@@ -3201,7 +3206,6 @@
   }
 
   $('leaveRoomBtn').addEventListener('click', leaveRoom);
-  $('leaveRoomBtn2').addEventListener('click', leaveRoom);
   $('leaveBigBtn').addEventListener('click', leaveRoom);
   $('askUnlockBtn').addEventListener('click', function () {
     var b = $('askUnlockBtn');
@@ -3246,8 +3250,13 @@
     restoreDraft();
     var has = text.trim().length > 0;
     var inRoom = mode === 'room';
-    $('readyRoom').textContent = inRoom && roomInfo ? roomLine(roomInfo) : '';
-    $('readyRoom').hidden = !inRoom;
+    // In a session, its title is the page's heading and Luddite drops to a small mark above it.
+    var titled = !!(inRoom && roomInfo);
+    $('readyScreen').classList.toggle('insession', titled);
+    $('readyTitle').textContent = titled ? roomInfo.title : '';
+    $('readyTitle').hidden = !titled;
+    $('readyRoom').textContent = titled && roomInfo.title.indexOf(roomInfo.teacherName) === -1 ? roomInfo.teacherName : '';
+    $('readyRoom').hidden = !$('readyRoom').textContent;
     // Say only the rules this teacher has switched on.
     var rules = [];
     if (inRoom && roomInfo && roomInfo.atHome) rules.push('You can work on this at home. Press Leave for now whenever you like, and come back to it, on any computer, until your teacher ends the session');
@@ -3277,8 +3286,8 @@
     $('submitBtn').hidden = !inRoom;
     $('submitBtn').disabled = !has || previewing;
     $('newPageWrap').hidden = !has;
-    $('dashWrap').hidden = !isTeacher || previewing || offlineBoot;
-    $('leaveWrap').hidden = !inRoom || previewing;
+    // One way out: Home. In a session it also forgets the session on this computer (students land on the Join page).
+    $('dashWrap').hidden = previewing || !(inRoom || (isTeacher && !offlineBoot));
     var fsOk = canFs() || fsExempt() || !P().lockOnLeave;
     $('noFullscreen').hidden = fsOk;
     $('startBtn').disabled = !fsOk || over;
@@ -3301,7 +3310,6 @@
       $('startBtn').hidden = true;
       $('submitBtn').hidden = true;
       $('newPageWrap').hidden = true;
-      $('leaveWrap').hidden = true;
       $('submitNote').hidden = false;
       $('submitNote').className = 'fine good';
       $('submitNote').textContent = 'Handed in at ' + clock(roomInfo.submittedAt) + '. If you need to keep working on it, ask your teacher to unlock it; this page opens again by itself.';
@@ -4320,15 +4328,22 @@
     if (!await ask({ title: 'Start Draft ' + (now + 1) + '?', text: 'Draft ' + now + ' is kept as it is now, with any comments on it, and you can reread it under Drafts. Draft ' + (now + 1) + ' starts as a copy, and your teacher grades it afresh.', ok: 'Start Draft ' + (now + 1) })) return;
     var b = $('dbNewBtn');
     b.disabled = true;
+    var d = null;
     try {
       await report('writing'); // the server has their writing as it is now
-      var d = await api('/luddite/newdraft', { code: roomCode });
-      if (roomInfo) { roomInfo.drafts = d.room.drafts; roomInfo.sharedId = d.room.sharedId; roomInfo.draftNames = d.room.draftNames; }
-      syncClassWork();
-      drawDrafts((roomInfo && roomInfo.drafts) || []);
-      $('dbMeta').textContent = 'You’re writing Draft ' + (now + 1) + ' now';
+      d = await api('/luddite/newdraft', { code: roomCode });
     } catch (e) {
       tell('Couldn’t Start a New Draft', e.message === 'nothing_yet' ? 'Write something first.' : e.message === 'cant_write' ? 'You can’t write in this session right now.' : e.message === 'too_many_drafts' ? 'That’s as many drafts as one session keeps.' : 'Check your connection and try again.');
+    }
+    // Redrawing stays outside the try: the draft exists by now, so a slip here mustn't say it failed.
+    // (Started from the writing page's Drafts menu, the Drafts box was never opened and has no draftsCtx.)
+    if (d) {
+      if (roomInfo) { roomInfo.drafts = d.room.drafts; roomInfo.sharedId = d.room.sharedId; roomInfo.draftNames = d.room.draftNames; }
+      syncClassWork();
+      if (draftsCtx && !$('draftsBox').hidden) {
+        drawDrafts((roomInfo && roomInfo.drafts) || []);
+        $('dbMeta').textContent = 'You’re writing Draft ' + (now + 1) + ' now';
+      }
     }
     b.disabled = false;
     if (writing && !locked) pad.focus();
@@ -4652,16 +4667,29 @@
   // Sessions on Home that this teacher writes in (not their own).
   async function loadForYou() {
     var list = (await loadMine()).filter(function (a) { return a.status !== 'removed'; });
+    // Grading shared back to them, as on a student's Join page (the comments open read-only on the marking page).
+    var back = [];
+    try { back = (await api('/luddite/returned')).papers || []; } catch (e) {}
     var box = $('forYouList');
     box.innerHTML = '';
-    $('forYouBox').hidden = !list.length;
+    $('forYouBox').hidden = !list.length && !back.length;
+    back.forEach(function (p) {
+      var row = el('div', 'item');
+      var w = el('div', 'who');
+      w.appendChild(el('b', null, p.roomTitle || 'Writing'));
+      w.appendChild(el('span', null, 'Comments shared ' + new Date(p.returnedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })));
+      row.appendChild(w);
+      row.appendChild(button('Read the comments', 'btn small', function () { openBack(p.id); }));
+      box.appendChild(row);
+    });
     list.forEach(function (a) {
       var row = el('div', 'item');
       var w = el('div', 'who');
       w.appendChild(el('b', null, a.title));
-      w.appendChild(el('span', null, a.teacherName + ' \u00b7 ' + (a.state === 'running' ? 'happening now' : 'opens ' + whenLabel(a.startAt))));
+      w.appendChild(el('span', null, a.teacherName + ' \u00b7 ' + (a.handedIn ? 'handed in' : a.state === 'running' ? 'happening now' : 'opens ' + whenLabel(a.startAt))));
       row.appendChild(w);
-      if (a.state === 'running') row.appendChild(button(a.handedIn ? 'Open' : 'Enter', 'btn small', function () { mode = 'room'; previewing = false; roomCode = a.code; joinRoom(a.code); }));
+      // Handed in is locked until the teacher unlocks it; the session's page is where to ask.
+      if (a.state === 'running') row.appendChild(button(a.handedIn ? 'Ask to unlock' : 'Enter', a.handedIn ? 'btn small ghost' : 'btn small', function () { mode = 'room'; previewing = false; roomCode = a.code; joinRoom(a.code); }));
       else row.appendChild(el('span', 'pill', 'Not started'));
       box.appendChild(row);
     });
@@ -4775,7 +4803,7 @@
       setDisplayName((await api('/luddite/me', { displayName: name.trim() })).displayName);
     } catch (e) { tell('Couldn’t Save That', 'Try again.'); }
   });
-  $('dashLink').addEventListener('click', showDash);
+  $('dashLink').addEventListener('click', function () { if (mode === 'room') leaveRoom(); else showDash(); });
   $('backToDash').addEventListener('click', showDash);
 
   $('soloBtn').addEventListener('click', function () {
